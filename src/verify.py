@@ -213,13 +213,6 @@ def verify_explain(cfg: Config) -> None:
     print(f"email lookup: uses email_1, returned={stats['nReturned']}, "
           f"keys={stats['totalKeysExamined']}, serverside {stats['executionTimeMillis']} ms")
 
-    exp = coll.find({"value.accessToken": doc["value"]["accessToken"]}).limit(1).explain()
-    stats = exp["executionStats"]
-    assert "accessToken_1" in plan_of(exp), \
-        f"token lookup not using accessToken_1: {plan_of(exp)[:400]}"
-    print(f"token lookup: uses accessToken_1, returned={stats['nReturned']}, "
-          f"keys={stats['totalKeysExamined']}, serverside {stats['executionTimeMillis']} ms")
-
     from datetime import datetime, timezone
     cutoff = datetime.fromtimestamp((EPOCH_ANCHOR_MS - 43_200_000) / 1000,
                                     tz=timezone.utc) \

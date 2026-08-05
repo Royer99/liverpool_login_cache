@@ -11,7 +11,6 @@ Operation mapping (Redis -> MongoDB):
 Customer-requested secondary-index reads (no Redis equivalent — impossible
 without SCAN there; each uses one of the query indexes from ensure_indexes):
   email lookup    -> find on value.profile.email           (name: find_by_email)
-  token lookup    -> find_one on value.accessToken         (name: find_by_token)
   device recency  -> find device os + lastUsedDate range   (name: sessions_by_device)
 Lookup values are derived client-side via build_session_doc (generation is
 deterministic), so the harness hits real stored values with zero memory.
@@ -173,12 +172,6 @@ class SessionReader(User):
             return
         _timed("find_by_email", lambda: list(
             COLL.find({"value.profile.email": prof["email"]}).limit(20)))
-
-    @task(1)
-    def find_by_token(self) -> None:
-        """Reverse lookup: which session carries this token (accessToken_1)."""
-        tok = build_session_doc(CFG, self._sample_index())["value"]["accessToken"]
-        _timed("find_by_token", lambda: COLL.find_one({"value.accessToken": tok}))
 
     @task(1)
     def sessions_by_device(self) -> None:

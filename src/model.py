@@ -164,10 +164,11 @@ def ensure_indexes(coll: Any, enable_ttl_index: bool, create_type_index: bool,
 
     The hot read path (point read by ``_id``) needs none: ``_id`` is the
     Redis key and its unique index comes for free. The query indexes serve
-    the ADDITIONAL customer-requested lookups (by email, by access token,
-    by device type + recency) and never touch the point-read plan. Plain
-    (non-partial) indexes by request: docs without the field get a null
-    entry. Call this only AFTER a bulk load.
+    the ADDITIONAL customer-requested lookups (by email, by device type +
+    recency) and never touch the point-read plan. Plain (non-partial)
+    indexes by request: docs without the field get a null entry. No index
+    on value.accessToken: ~1 KB JWT keys over 13.7M docs made the build
+    unacceptably slow (dropped 2026-08-05).
     """
     created: list[str] = []
     if create_type_index:
@@ -175,8 +176,6 @@ def ensure_indexes(coll: Any, enable_ttl_index: bool, create_type_index: bool,
     if create_query_indexes:
         created.append(coll.create_index(
             [("value.profile.email", 1)], name="email_1"))
-        created.append(coll.create_index(
-            [("value.accessToken", 1)], name="accessToken_1"))
         created.append(coll.create_index(
             [("value.deviceInfo.os", 1), ("value.lastUsedDate", -1)],
             name="device_lastUsed"))

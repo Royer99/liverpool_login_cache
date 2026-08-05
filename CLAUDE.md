@@ -3,9 +3,11 @@
 MongoDB session-store benchmark mirroring a Redis RDB export 1:1. Fidelity to
 the export is the point of the demo — do not normalize, split, or redesign
 the schema, and do not add secondary indexes to the hot read path. The
-`_id` point read must stay EXPRESS/IDHACK. The email/token/device query
-indexes (`ensure_indexes`, added 2026-08-05 at customer request) serve
-their own named ops only and must never appear in `get_session`'s plan.
+`_id` point read must stay EXPRESS/IDHACK. The email/device query indexes
+(`ensure_indexes`, added 2026-08-05 at customer request) serve their own
+named ops only and must never appear in `get_session`'s plan. Do NOT index
+`value.accessToken`: ~1 KB JWT keys make the build/index prohibitively
+expensive (tried and dropped 2026-08-05).
 
 ## Commands
 

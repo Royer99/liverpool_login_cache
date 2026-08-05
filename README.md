@@ -58,8 +58,10 @@ indexes — documents without a field appear as one null entry each:
 | index | keys | serves |
 |---|---|---|
 | `email_1` | `{value.profile.email: 1}` | all sessions for an account |
-| `accessToken_1` | `{value.accessToken: 1}` | reverse token lookup |
 | `device_lastUsed` | `{value.deviceInfo.os: 1, value.lastUsedDate: -1}` | newest sessions per device type, sorted by the index |
+
+(No index on `value.accessToken`: ~1 KB JWT keys across 13.7M docs make the
+build and the index itself disproportionately expensive; dropped by choice.)
 
 They never touch the point-read plan — `verify.py` proves both facts with
 `explain()`. Remaining optional indexes: `{type: 1}` (off by default) and a
@@ -151,12 +153,11 @@ Operations, mapped 1:1 to the Redis calls they replace:
 | `insert_session` | `SETEX` new | `insert_one` full session doc |
 | `push_index` | `ZADD` | `$push` with `$slice` cap |
 | `find_by_email` | — (needs `SCAN`) | `find` on `value.profile.email` (email_1) |
-| `find_by_token` | — (needs `SCAN`) | `find_one` on `value.accessToken` (accessToken_1) |
 | `sessions_by_device` | — (needs `SCAN`) | os equality + `lastUsedDate` range, index-sorted (device_lastUsed) |
 
-The three secondary-index reads derive their lookup values client-side with
+The secondary-index reads derive their lookup values client-side with
 `build_session_doc` (generation is deterministic), so they always hit real
-stored emails/tokens with zero memory or precomputed lists.
+stored emails with zero memory or precomputed lists.
 
 Notes on honesty:
 
