@@ -59,6 +59,11 @@ python scripts/report.py --csv-prefix results
 - Bull stream `bull:token-refresh:events` entries have fields
   `event`/`jobId`/`prev`; meta hash has literal dotted key
   `opts.maxLenEvents` (legal in MongoDB, kept for fidelity).
+- `value.profile` (email, emailVerified, firstName, lastName, phoneNumber)
+  is NOT from the export — a customer-requested addition (2026-08-05),
+  present only on non-anonymous sessions (~70%). Emails use RFC 2606
+  reserved domains; names come from curated ASCII lists. The JWT claim set
+  stays exactly as observed — do not add email claims to the token.
 
 ## Gotchas
 

@@ -68,6 +68,32 @@ def test_access_token_is_rs256_shaped_jwt(cfg):
     assert payload["https://liverpool.com.mx/gcp-migrated"] == dec["gcpMigrated"]
 
 
+def test_profile_present_iff_not_anonymous(cfg):
+    """profile (email + userinfo) is a documented addition to the export:
+    every non-anonymous session carries it, anonymous ones never do, and the
+    email is deterministic and confined to RFC 2606 reserved domains."""
+    import re
+
+    seen = {True: 0, False: 0}
+    for i in range(300):
+        doc = build_session_doc(cfg, i)
+        anon = doc["value"]["decodeAccessToken"]["isAnonymous"]
+        seen[anon] += 1
+        if anon:
+            assert "profile" not in doc["value"]
+            continue
+        prof = doc["value"]["profile"]
+        assert set(prof) == {"email", "emailVerified", "firstName", "lastName",
+                             "phoneNumber"}
+        assert re.fullmatch(
+            r"[a-z]+\.[a-z]+\d{3}@(example\.(com|net|org)|correo\.example\.mx)",
+            prof["email"]), prof["email"]
+        assert re.fullmatch(r"\+5255\d{8}", prof["phoneNumber"])
+        assert isinstance(prof["emailVerified"], bool)
+        assert prof == build_session_doc(cfg, i)["value"]["profile"]
+    assert seen[True] > 0 and seen[False] > 0
+
+
 def test_payload_size_near_target(cfg):
     sizes = [len(json.dumps(build_session_doc(cfg, i)["value"], default=str,
                             separators=(",", ":")))

@@ -46,6 +46,20 @@ _MODELS = ["iPhone14,5", "iPhone15,3", "SM-G991B", "SM-A546E", "Pixel 8", "Moto 
 _CONTEXTS = ["web", "app", "mweb"]
 _SCOPES = "openid profile email offline_access read:current_user"
 
+# The profile block is a documented ADDITION to the export shape (requested
+# for the demo: an auth cache realistically carries userinfo next to the
+# tokens). Names are curated ASCII lists, not faker (determinism), and email
+# domains are RFC 2606 reserved so no real address can ever appear.
+_FIRST_NAMES = ["Maria", "Jose", "Juan", "Guadalupe", "Carlos", "Ana", "Luis",
+                "Fernanda", "Jorge", "Alejandra", "Miguel", "Sofia", "Ricardo",
+                "Valeria", "Eduardo", "Daniela", "Roberto", "Regina", "Andres",
+                "Camila"]
+_LAST_NAMES = ["Hernandez", "Garcia", "Martinez", "Lopez", "Gonzalez",
+               "Rodriguez", "Perez", "Sanchez", "Ramirez", "Torres", "Flores",
+               "Rivera", "Gomez", "Diaz", "Cruz", "Morales", "Reyes",
+               "Gutierrez", "Ortiz", "Chavez"]
+_EMAIL_DOMAINS = ["example.com", "example.net", "example.org", "correo.example.mx"]
+
 
 def _fake_ip(rng: Any) -> str:
     # RFC 5737 TEST-NET ranges only, so no real customer IPs can ever appear.
@@ -100,6 +114,7 @@ def build_session_doc(cfg: Config, i: int) -> dict[str, Any]:
     sub = f"auth0|{rng.getrandbits(96):024x}"
     gcp_migrated = rng.random() < 0.5
     phone_hash = rng.getrandbits(128).to_bytes(16, "big").hex()
+    phone = "" if anon else f"+5255{rng.randrange(10**8):08d}"
     aud = ["https://auth.qa.example-retail.mx/userinfo",
            "https://api.example-retail.mx/"]
 
@@ -113,7 +128,7 @@ def build_session_doc(cfg: Config, i: int) -> dict[str, Any]:
         "https://liverpool.com.mx/isSignUp": rng.random() < 0.05,
         "https://liverpool.com.mx/is_anonymous": anon,
         "https://liverpool.com.mx/phoneHash": phone_hash,
-        "https://liverpool.com.mx/phone_number": "" if anon else f"+5255{rng.randrange(10**8):08d}",
+        "https://liverpool.com.mx/phone_number": phone,
         "https://liverpool.com.mx/prn": rng.getrandbits(128).to_bytes(16, "big").hex(),
         "https://liverpool.com.mx/prnLegacy": f"{rng.randrange(10**9):09d}",
         "https://liverpool.com.mx/roles": [],
@@ -164,6 +179,17 @@ def build_session_doc(cfg: Config, i: int) -> dict[str, Any]:
             "anonId": uuid if anon else "",
         },
     }
+    if not anon:
+        first = rng.choice(_FIRST_NAMES)
+        last1, last2 = rng.choice(_LAST_NAMES), rng.choice(_LAST_NAMES)
+        value["profile"] = {
+            "email": f"{first.lower()}.{last1.lower()}{rng.randrange(1000):03d}"
+                     f"@{rng.choice(_EMAIL_DOMAINS)}",
+            "emailVerified": rng.random() < 0.9,
+            "firstName": first,
+            "lastName": f"{last1} {last2}",
+            "phoneNumber": phone,
+        }
     base = len(json.dumps(value, separators=(",", ":")))
     pad = _payload_size_target(cfg, rng) - base - 20
     if pad > 0:

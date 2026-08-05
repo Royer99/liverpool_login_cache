@@ -27,12 +27,12 @@ def shape(o):
 
 def _pick_full_session(cfg):
     """Find a generated session doc carrying the optional fields
-    (ttlSeconds, padding) so the comparison covers the full key set."""
+    (ttlSeconds, padding, profile) so the comparison covers the full key set."""
     for i in range(200):
         d = build_session_doc(cfg, i)
-        if "ttlSeconds" in d and "padding" in d["value"]:
+        if "ttlSeconds" in d and "padding" in d["value"] and "profile" in d["value"]:
             return d
-    pytest.fail("no session doc with ttlSeconds+padding in first 200")
+    pytest.fail("no session doc with ttlSeconds+padding+profile in first 200")
 
 
 def test_session_shape_matches_export(cfg):
@@ -59,4 +59,4 @@ def test_optional_fields_are_the_only_variance(cfg):
     assert all(ks | {"ttlSeconds"} == set(FIXTURE["session"]) for ks in key_sets)
     value_key_sets = {frozenset(build_session_doc(cfg, i)["value"]) for i in range(300)}
     full = set(FIXTURE["session"]["value"])
-    assert all(vk | {"padding"} == full for vk in value_key_sets)
+    assert all(vk | {"padding", "profile"} == full for vk in value_key_sets)

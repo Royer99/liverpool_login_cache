@@ -1,5 +1,5 @@
 {
-  "comment": "Hand-written documents mirroring the QA RDB export shape. No customer data; every value is fabricated. Field NAMES and types are the contract.",
+  "comment": "Hand-written documents mirroring the QA RDB export shape. No customer data; every value is fabricated. Field NAMES and types are the contract. value.profile is a documented ADDITION to the export (customer-requested cached userinfo); everything else matches the RDB dumps.",
   "session": {
     "_id": "keyv::AUTH0_DEFAULT_INJECTOR:session:00000000-0000-4000-8000-000000000000",
     "shard": "node1",
@@ -37,6 +37,13 @@
         "phoneHash": "00000000000000000000000000000000",
         "isAnonymous": true,
         "anonId": "00000000-0000-4000-8000-000000000000"
+      },
+      "profile": {
+        "email": "maria.hernandez000@example.com",
+        "emailVerified": true,
+        "firstName": "Maria",
+        "lastName": "Hernandez Garcia",
+        "phoneNumber": "+525500000000"
       },
       "padding": "AAAA"
     },

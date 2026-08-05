@@ -24,7 +24,9 @@ One collection, one document per Redis key:
 // session (Redis string, ~86% of keys)
 { _id: "keyv::AUTH0_DEFAULT_INJECTOR:session:<uuid>",   // the Redis key
   shard: "node1", type: "string",
-  value: { accessToken, scope, deviceInfo: {...}, decodeAccessToken: {...}, ... },
+  value: { accessToken, scope, deviceInfo: {...}, decodeAccessToken: {...},
+           profile: { email, emailVerified, firstName, lastName, phoneNumber },
+           ... },
   expiresAt: ISODate(),   // from the keyv envelope's `expires` (epoch ms)
   ttlSeconds: 604800 }    // only when the source key had a live TTL (~99% do)
 
@@ -36,8 +38,14 @@ One collection, one document per Redis key:
 // plus one BullMQ stream doc and one meta hash doc
 ```
 
-The only intentional transform: the keyv envelope's inner JSON **string** is
-stored parsed, as a real object. Same fields, but queryable.
+Two intentional deviations from the export, both documented:
+
+1. The keyv envelope's inner JSON **string** is stored parsed, as a real
+   object. Same fields, but queryable.
+2. `value.profile` (email + basic userinfo) is an **addition** — the export
+   carries no email, but the customer's auth app will cache profile data, so
+   non-anonymous sessions (~70%) include it. Emails use RFC 2606 reserved
+   domains only; the JWT claim set is untouched (it matches the export).
 
 **Zero secondary indexes on the primary access path.** `_id` *is* the Redis
 key; its unique index comes for free and the point read is an `EXPRESS`/
