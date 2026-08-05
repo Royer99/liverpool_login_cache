@@ -75,10 +75,19 @@ def _insert_batch(coll: Any, batch: list[dict[str, Any]]) -> int:
         coll.insert_many(batch, ordered=False)
         return len(batch)
     except BulkWriteError as e:
-        dupes = [w for w in e.details.get("writeErrors", []) if w.get("code") == 11000]
-        if len(dupes) != len(e.details.get("writeErrors", [])):
-            raise
-        return len(batch) - len(dupes)
+        errs = e.details.get("writeErrors", [])
+        others = [w for w in errs if w.get("code") != 11000]
+        if others:
+            # Summarize instead of re-raising: BulkWriteError.details embeds
+            # every failed document, flooding the terminal with megabytes.
+            reasons = sorted({(w.get("code"), str(w.get("errmsg", ""))[:300]) for w in others})
+            summary = "; ".join(f"code {c}: {m}" for c, m in reasons)
+            wce = e.details.get("writeConcernErrors", [])
+            if wce:
+                summary += "; writeConcernErrors: " + str(wce)[:300]
+            raise SystemExit(
+                f"insert_many rejected {len(others)}/{len(batch)} docs: {summary}")
+        return len(batch) - len(errs)
 
 
 def load_range(cfg: Config, worker: int, sess_range: tuple[int, int],
