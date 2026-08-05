@@ -1,0 +1,78 @@
+{
+  "comment": "Hand-written documents mirroring the QA RDB export shape. No customer data; every value is fabricated. Field NAMES and types are the contract.",
+  "session": {
+    "_id": "keyv::AUTH0_DEFAULT_INJECTOR:session:00000000-0000-4000-8000-000000000000",
+    "shard": "node1",
+    "type": "string",
+    "value": {
+      "accessToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IkZBS0UtMDAwMCJ9.eyJpc3MiOiJodHRwczovL2V4YW1wbGUvIiwic3ViIjoiYXV0aDB8MDAwIn0.RkFLRVNJR05BVFVSRQ",
+      "scope": "openid profile email offline_access read:current_user",
+      "expiresIn": 1800,
+      "tokenType": "Bearer",
+      "injectorName": "AUTH0_DEFAULT_INJECTOR",
+      "lastUsedDate": "2026-07-28T12:00:00.000Z",
+      "deviceInfo": {
+        "model": "iPhone14,5",
+        "browser": "Safari",
+        "osVersion": "17.5.1",
+        "os": "iOS",
+        "ip": "192.0.2.10"
+      },
+      "context": "web",
+      "atgContext": "atg-00000001",
+      "decodeAccessToken": {
+        "https://liverpool.com.mx/anon_id": "00000000-0000-4000-8000-000000000000",
+        "https://liverpool.com.mx/is_anonymous": true,
+        "iss": "https://auth.qa.example-retail.mx/",
+        "sub": "auth0|000000000000000000000000",
+        "aud": ["https://auth.qa.example-retail.mx/userinfo"],
+        "iat": 1753660800,
+        "exp": 1753662600,
+        "scope": "openid profile email offline_access read:current_user",
+        "gty": "password",
+        "azp": "013MkUnpqRtTnoVrBFzyFXfd5WcEpfpB",
+        "requireProgressiveProfiling": false,
+        "roles": [],
+        "gcpMigrated": true,
+        "phoneHash": "00000000000000000000000000000000",
+        "isAnonymous": true,
+        "anonId": "00000000-0000-4000-8000-000000000000"
+      },
+      "padding": "AAAA"
+    },
+    "expiresAt": "2026-08-04T12:00:00+00:00",
+    "ttlSeconds": 604800
+  },
+  "zset": {
+    "_id": "AUTH0_DEFAULT_INJECTOR:idx:user:013MkUnpqRtTnoVrBFzyFXfd5WcEpfpB@clients:sessions",
+    "shard": "node2",
+    "type": "zset",
+    "value": [
+      {"member": "00000000-0000-4000-8000-000000000000", "score": 1770218306487}
+    ]
+  },
+  "stream": {
+    "_id": "bull:token-refresh:events",
+    "shard": "node3",
+    "type": "stream",
+    "value": [
+      {
+        "id": "1783689323674-0",
+        "fields": {
+          "event": "active",
+          "jobId": "refresh-00000000-0000-4000-8000-000000000000",
+          "prev": "waiting"
+        }
+      }
+    ]
+  },
+  "hash": {
+    "_id": "bull:token-refresh:meta",
+    "shard": "node1",
+    "type": "hash",
+    "value": {
+      "opts.maxLenEvents": "10000",
+      "version": "5.34.4"
+    }
+  }
+}

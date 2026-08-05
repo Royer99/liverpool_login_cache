@@ -1,0 +1,6 @@
+pymongo>=4.6
+locust>=2.20
+python-dotenv>=1.0
+faker>=24.0
+matplotlib>=3.8
+pytest>=8.0
