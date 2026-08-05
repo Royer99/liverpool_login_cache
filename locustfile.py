@@ -238,3 +238,9 @@ class SessionWriter(User):
             {"$push": {"value": {"$each": [member],
                                  "$slice": -CFG.max_members_per_index_doc}}},
         ))
+
+
+if CFG.write_ratio == 0:
+    # WRITE_RATIO=0 -> read-only benchmark: unregister the writer entirely
+    # (its class weight floors at 1, so it would still spawn otherwise).
+    del SessionWriter

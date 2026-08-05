@@ -165,20 +165,31 @@ def ensure_indexes(coll: Any, enable_ttl_index: bool, create_type_index: bool,
     The hot read path (point read by ``_id``) needs none: ``_id`` is the
     Redis key and its unique index comes for free. The query indexes serve
     the ADDITIONAL customer-requested lookups (by email, by device type +
-    recency) and never touch the point-read plan. Plain (non-partial)
-    indexes by request: docs without the field get a null entry. No index
-    on value.accessToken: ~1 KB JWT keys over 13.7M docs made the build
+    recency) and never touch the point-read plan. No index on
+    value.accessToken: ~1 KB JWT keys over 13.7M docs made the build
     unacceptably slow (dropped 2026-08-05).
     """
     created: list[str] = []
     if create_type_index:
         created.append(coll.create_index([("type", 1)], name="type_1"))
     if create_query_indexes:
+        # PARTIAL is load-bearing, not an optimization: zset docs store an
+        # ARRAY in `value`, so a plain index on any value.* path goes
+        # multikey. A multikey compound cannot provide the lastUsedDate sort
+        # or tight bounds -> blocking in-memory SORT over every matching doc
+        # (the 2026-08-05 benchmark stall: sessions_by_device fetched ~3.4M
+        # docs per query and never returned). The $exists filters exclude
+        # the array-valued docs; equality on the field implies $exists, so
+        # the planner still uses these indexes for the harness lookups.
         created.append(coll.create_index(
-            [("value.profile.email", 1)], name="email_1"))
+            [("value.profile.email", 1)], name="email_1",
+            partialFilterExpression={"value.profile.email": {"$exists": True}},
+        ))
         created.append(coll.create_index(
             [("value.deviceInfo.os", 1), ("value.lastUsedDate", -1)],
-            name="device_lastUsed"))
+            name="device_lastUsed",
+            partialFilterExpression={"value.deviceInfo.os": {"$exists": True}},
+        ))
     if enable_ttl_index:
         # Off by default: the dataset carries past expiries on purpose and
         # would delete itself mid-benchmark.

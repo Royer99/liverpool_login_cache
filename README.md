@@ -51,9 +51,12 @@ Two intentional deviations from the export, both documented:
 key; its unique index comes for free and the point read is an `EXPRESS`/
 `IDHACK` plan (proven by `verify.py`, not asserted).
 
-Three **query indexes** serve the additional customer lookups (things Redis
-cannot do without `SCAN`), created after the load as plain (non-partial)
-indexes — documents without a field appear as one null entry each:
+Two **query indexes** serve the additional customer lookups (things Redis
+cannot do without `SCAN`), created after the load. Both are **partial by
+necessity, not preference**: zset docs store an array in `value`, and
+indexing them makes any `value.*` index multikey — a multikey compound
+cannot provide the sort or tight bounds, degrading the device query to an
+in-memory sort over millions of fetched docs (measured, not theoretical):
 
 | index | keys | serves |
 |---|---|---|
