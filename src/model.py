@@ -158,15 +158,34 @@ def sample_session_index(rng: random.Random, session_count: int,
     return rng.randrange(0, boundary)
 
 
-def ensure_indexes(coll: Any, enable_ttl_index: bool, create_type_index: bool) -> list[str]:
+def ensure_indexes(coll: Any, enable_ttl_index: bool, create_type_index: bool,
+                   create_query_indexes: bool = True) -> list[str]:
     """Create the (few) optional secondary indexes; returns names created.
 
-    The hot read path needs none: ``_id`` is the Redis key and its unique
-    index comes for free. Call this only AFTER a bulk load.
+    The hot read path (point read by ``_id``) needs none: ``_id`` is the
+    Redis key and its unique index comes for free. The query indexes serve
+    the ADDITIONAL customer-requested lookups (by email, by access token,
+    by device type + recency) and never touch the point-read plan. All are
+    partial: session-only fields would otherwise index 2.2M zset docs as
+    null. Call this only AFTER a bulk load.
     """
     created: list[str] = []
     if create_type_index:
         created.append(coll.create_index([("type", 1)], name="type_1"))
+    if create_query_indexes:
+        created.append(coll.create_index(
+            [("value.profile.email", 1)], name="email_1",
+            partialFilterExpression={"value.profile.email": {"$exists": True}},
+        ))
+        created.append(coll.create_index(
+            [("value.accessToken", 1)], name="accessToken_1",
+            partialFilterExpression={"value.accessToken": {"$exists": True}},
+        ))
+        created.append(coll.create_index(
+            [("value.deviceInfo.os", 1), ("value.lastUsedDate", -1)],
+            name="device_lastUsed",
+            partialFilterExpression={"value.deviceInfo.os": {"$exists": True}},
+        ))
     if enable_ttl_index:
         # Off by default: the dataset carries past expiries on purpose and
         # would delete itself mid-benchmark.

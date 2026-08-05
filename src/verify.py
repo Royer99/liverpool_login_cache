@@ -23,7 +23,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config import Config, load_config  # noqa: E402
+from generate import build_session_doc  # noqa: E402
 from model import (  # noqa: E402
+    EPOCH_ANCHOR_MS,
     INDEX_DOC_FIELDS,
     SESSION_DOC_FIELDS,
     sample_session_index,
@@ -190,6 +192,48 @@ def verify_explain(cfg: Config) -> None:
     print(f"$in batch fetch: examined keys={stats['totalKeysExamined']}, "
           f"docs={stats['totalDocsExamined']}, returned={stats['nReturned']}, "
           f"serverside {stats['executionTimeMillis']} ms (uses _id index)")
+
+    # Customer query indexes: derive real stored values client-side
+    # (generation is deterministic) and prove each lookup is an IXSCAN.
+    doc = None
+    for i in range(50):
+        doc = build_session_doc(cfg, i)
+        if "profile" in doc["value"]:
+            break
+    assert doc and "profile" in doc["value"], "no non-anonymous session in first 50"
+
+    def plan_of(e: dict) -> str:
+        return json.dumps(e["queryPlanner"]["winningPlan"])
+
+    exp = coll.find({"value.profile.email": doc["value"]["profile"]["email"]}) \
+              .limit(20).explain()
+    stats = exp["executionStats"]
+    assert "email_1" in plan_of(exp), \
+        f"email lookup not using email_1: {plan_of(exp)[:400]}"
+    print(f"email lookup: uses email_1, returned={stats['nReturned']}, "
+          f"keys={stats['totalKeysExamined']}, serverside {stats['executionTimeMillis']} ms")
+
+    exp = coll.find({"value.accessToken": doc["value"]["accessToken"]}).limit(1).explain()
+    stats = exp["executionStats"]
+    assert "accessToken_1" in plan_of(exp), \
+        f"token lookup not using accessToken_1: {plan_of(exp)[:400]}"
+    print(f"token lookup: uses accessToken_1, returned={stats['nReturned']}, "
+          f"keys={stats['totalKeysExamined']}, serverside {stats['executionTimeMillis']} ms")
+
+    from datetime import datetime, timezone
+    cutoff = datetime.fromtimestamp((EPOCH_ANCHOR_MS - 43_200_000) / 1000,
+                                    tz=timezone.utc) \
+        .isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    exp = coll.find({"value.deviceInfo.os": "iOS",
+                     "value.lastUsedDate": {"$gte": cutoff}}) \
+              .sort("value.lastUsedDate", -1).limit(cfg.zrange_limit).explain()
+    stats = exp["executionStats"]
+    p = plan_of(exp)
+    assert "device_lastUsed" in p, f"device query not using device_lastUsed: {p[:400]}"
+    assert '"SORT"' not in p, f"device query does an in-memory sort: {p[:400]}"
+    print(f"device+recency: uses device_lastUsed (sort by index, no SORT stage), "
+          f"returned={stats['nReturned']}, keys={stats['totalKeysExamined']}, "
+          f"serverside {stats['executionTimeMillis']} ms")
 
 
 def verify_storage(cfg: Config) -> None:

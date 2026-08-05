@@ -49,10 +49,22 @@ Two intentional deviations from the export, both documented:
 
 **Zero secondary indexes on the primary access path.** `_id` *is* the Redis
 key; its unique index comes for free and the point read is an `EXPRESS`/
-`IDHACK` plan (proven by `verify.py`, not asserted). The only optional
-indexes are `{type: 1}` (off by default) and a TTL index on `expiresAt`
-(`ENABLE_TTL_INDEX=false` by default — the dataset carries past expiries on
-purpose and would delete itself mid-benchmark).
+`IDHACK` plan (proven by `verify.py`, not asserted).
+
+Three **query indexes** serve the additional customer lookups (things Redis
+cannot do without `SCAN`), created after the load, all partial so the 2.2M
+zset docs are not indexed as nulls:
+
+| index | keys | serves |
+|---|---|---|
+| `email_1` | `{value.profile.email: 1}` | all sessions for an account |
+| `accessToken_1` | `{value.accessToken: 1}` | reverse token lookup |
+| `device_lastUsed` | `{value.deviceInfo.os: 1, value.lastUsedDate: -1}` | newest sessions per device type, sorted by the index |
+
+They never touch the point-read plan — `verify.py` proves both facts with
+`explain()`. Remaining optional indexes: `{type: 1}` (off by default) and a
+TTL index on `expiresAt` (`ENABLE_TTL_INDEX=false` by default — the dataset
+carries past expiries on purpose and would delete itself mid-benchmark).
 
 ## Scale
 
@@ -138,6 +150,13 @@ Operations, mapped 1:1 to the Redis calls they replace:
 | `update_session` | `SETEX` refresh | `$set` a field inside `value` |
 | `insert_session` | `SETEX` new | `insert_one` full session doc |
 | `push_index` | `ZADD` | `$push` with `$slice` cap |
+| `find_by_email` | — (needs `SCAN`) | `find` on `value.profile.email` (email_1) |
+| `find_by_token` | — (needs `SCAN`) | `find_one` on `value.accessToken` (accessToken_1) |
+| `sessions_by_device` | — (needs `SCAN`) | os equality + `lastUsedDate` range, index-sorted (device_lastUsed) |
+
+The three secondary-index reads derive their lookup values client-side with
+`build_session_doc` (generation is deterministic), so they always hit real
+stored emails/tokens with zero memory or precomputed lists.
 
 Notes on honesty:
 

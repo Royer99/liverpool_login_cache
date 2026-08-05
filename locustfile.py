@@ -8,6 +8,14 @@ Operation mapping (Redis -> MongoDB):
   SETEX (new)     -> insert_one full session doc           (name: insert_session)
   ZADD            -> update_one $push with $slice          (name: push_index)
 
+Customer-requested secondary-index reads (no Redis equivalent — impossible
+without SCAN there; each uses one of the query indexes from ensure_indexes):
+  email lookup    -> find on value.profile.email           (name: find_by_email)
+  token lookup    -> find_one on value.accessToken         (name: find_by_token)
+  device recency  -> find device os + lastUsedDate range   (name: sessions_by_device)
+Lookup values are derived client-side via build_session_doc (generation is
+deterministic), so the harness hits real stored values with zero memory.
+
 Locust monkey-patches gevent before this module is imported, so importing
 pymongo here is safe. ONE MongoClient per worker process, at module scope,
 with connect=False — never per User or per task.
@@ -32,7 +40,7 @@ from pymongo import MongoClient  # noqa: E402
 from pymongo.errors import DuplicateKeyError  # noqa: E402
 
 from config import load_config  # noqa: E402
-from generate import build_session_doc  # noqa: E402
+from generate import _OS, build_session_doc  # noqa: E402
 from model import (  # noqa: E402
     DEFAULT_SESSION_PREFIX,
     EPOCH_ANCHOR_MS,
@@ -118,10 +126,12 @@ class SessionReader(User):
         super().__init__(environment)
         self.rng = random.Random()
 
+    def _sample_index(self) -> int:
+        return sample_session_index(self.rng, CFG.session_doc_count,
+                                    CFG.hot_set_ratio, CFG.hot_access_share)
+
     def _sample_key(self) -> str:
-        i = sample_session_index(self.rng, CFG.session_doc_count,
-                                 CFG.hot_set_ratio, CFG.hot_access_share)
-        return session_key(CFG.random_seed, i)
+        return session_key(CFG.random_seed, self._sample_index())
 
     @task(max(1, round((1.0 - CFG.index_read_ratio) * 10)))
     def get_session(self) -> None:
@@ -149,6 +159,39 @@ class SessionReader(User):
             _MISS["mget_returned"] += len(docs)
             _fire("index_round_trip", rt_start,
                   response_length=_blen(idx) + _blen(docs))
+
+    @task(2)
+    def find_by_email(self) -> None:
+        """Account lookup: every session for one email (email_1 index).
+        Emails collide across sessions on purpose, so this returns a small
+        batch, like a 'your active sessions' page."""
+        for _ in range(8):  # ~30% of sessions are anonymous (no profile)
+            prof = build_session_doc(CFG, self._sample_index())["value"].get("profile")
+            if prof:
+                break
+        else:
+            return
+        _timed("find_by_email", lambda: list(
+            COLL.find({"value.profile.email": prof["email"]}).limit(20)))
+
+    @task(1)
+    def find_by_token(self) -> None:
+        """Reverse lookup: which session carries this token (accessToken_1)."""
+        tok = build_session_doc(CFG, self._sample_index())["value"]["accessToken"]
+        _timed("find_by_token", lambda: COLL.find_one({"value.accessToken": tok}))
+
+    @task(1)
+    def sessions_by_device(self) -> None:
+        """Newest sessions for one device type (device_lastUsed compound
+        index: os equality + lastUsedDate range/sort, no in-memory sort)."""
+        os_name = self.rng.choice([o for o, _ in _OS])
+        cutoff_ms = EPOCH_ANCHOR_MS - self.rng.randrange(3_600_000, 86_400_000)
+        cutoff = datetime.fromtimestamp(cutoff_ms / 1000, tz=timezone.utc) \
+            .isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        _timed("sessions_by_device", lambda: list(
+            COLL.find({"value.deviceInfo.os": os_name,
+                       "value.lastUsedDate": {"$gte": cutoff}})
+            .sort("value.lastUsedDate", -1).limit(CFG.zrange_limit)))
 
 
 class SessionWriter(User):
