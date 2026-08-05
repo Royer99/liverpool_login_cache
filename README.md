@@ -52,8 +52,8 @@ key; its unique index comes for free and the point read is an `EXPRESS`/
 `IDHACK` plan (proven by `verify.py`, not asserted).
 
 Three **query indexes** serve the additional customer lookups (things Redis
-cannot do without `SCAN`), created after the load, all partial so the 2.2M
-zset docs are not indexed as nulls:
+cannot do without `SCAN`), created after the load as plain (non-partial)
+indexes — documents without a field appear as one null entry each:
 
 | index | keys | serves |
 |---|---|---|

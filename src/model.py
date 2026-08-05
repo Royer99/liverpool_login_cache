@@ -165,27 +165,21 @@ def ensure_indexes(coll: Any, enable_ttl_index: bool, create_type_index: bool,
     The hot read path (point read by ``_id``) needs none: ``_id`` is the
     Redis key and its unique index comes for free. The query indexes serve
     the ADDITIONAL customer-requested lookups (by email, by access token,
-    by device type + recency) and never touch the point-read plan. All are
-    partial: session-only fields would otherwise index 2.2M zset docs as
-    null. Call this only AFTER a bulk load.
+    by device type + recency) and never touch the point-read plan. Plain
+    (non-partial) indexes by request: docs without the field get a null
+    entry. Call this only AFTER a bulk load.
     """
     created: list[str] = []
     if create_type_index:
         created.append(coll.create_index([("type", 1)], name="type_1"))
     if create_query_indexes:
         created.append(coll.create_index(
-            [("value.profile.email", 1)], name="email_1",
-            partialFilterExpression={"value.profile.email": {"$exists": True}},
-        ))
+            [("value.profile.email", 1)], name="email_1"))
         created.append(coll.create_index(
-            [("value.accessToken", 1)], name="accessToken_1",
-            partialFilterExpression={"value.accessToken": {"$exists": True}},
-        ))
+            [("value.accessToken", 1)], name="accessToken_1"))
         created.append(coll.create_index(
             [("value.deviceInfo.os", 1), ("value.lastUsedDate", -1)],
-            name="device_lastUsed",
-            partialFilterExpression={"value.deviceInfo.os": {"$exists": True}},
-        ))
+            name="device_lastUsed"))
     if enable_ttl_index:
         # Off by default: the dataset carries past expiries on purpose and
         # would delete itself mid-benchmark.
