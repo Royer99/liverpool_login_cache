@@ -43,10 +43,10 @@ echo "== warm-up ${WARMUP} (results discarded)"
   -u "${LOCUST_USERS:-200}" -r "${LOCUST_SPAWN_RATE:-20}" -t "$WARMUP" \
   --only-summary
 
-echo "== measured run ${LOCUST_RUN_TIME:-10m} -> ${CSV_PREFIX}_*.csv"
+echo "== measured run ${LOCUST_RUN_TIME:-10m} -> ${CSV_PREFIX}_*.csv + ${CSV_PREFIX}_report.html"
 "$LOCUST" -f locustfile.py --headless "${COMMON[@]}" \
   -u "${LOCUST_USERS:-200}" -r "${LOCUST_SPAWN_RATE:-20}" -t "${LOCUST_RUN_TIME:-10m}" \
-  --csv "$CSV_PREFIX" --csv-full-history
+  --csv "$CSV_PREFIX" --csv-full-history --html "${CSV_PREFIX}_report.html"
 
 echo "== report"
 .venv/bin/python scripts/report.py --csv-prefix "$CSV_PREFIX" || \

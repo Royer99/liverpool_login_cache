@@ -188,7 +188,9 @@ python scripts/report.py --csv-prefix results
 
 Prints **p50 / p95 / p99 / max per named operation** (never a bare mean) and
 writes `results_latency.png` — latency over time with the
-`READ_LATENCY_SLO_MS` line drawn on it.
+`READ_LATENCY_SLO_MS` line drawn on it. The measured run also writes
+Locust's standard HTML report (`results_report.html`: RPS, response-time
+percentiles, and user-count charts) — scp it off the EC2 to view.
 
 Two numbers must never be conflated:
 
