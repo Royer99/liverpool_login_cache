@@ -106,7 +106,45 @@ Notes, in the interest of honesty:
   it returns a projected single document (413 B — the ~1 KB access token
   never leaves the server).
 
-## 5. The database was not the limit
+## 5. Why the latencies are this low
+
+Two deliberate design decisions do most of the work; neither is an
+accident of the test.
+
+**Indexing strategy — the right indexes, and only those.**
+
+- The Redis key string *is* the `_id`, so the hottest operation (session
+  fetch) rides the built-in unique `_id` index: a single index seek, an
+  `EXPRESS`/`IDHACK` plan, no planner overhead, nothing extra to keep in
+  cache. Zero secondary indexes touch this path.
+- The one added index (`email_1`, for the account lookup Redis cannot do)
+  is **partial**, matching the data's shape: it excludes the 2.24M
+  array-valued index documents, which keeps it compact, non-multikey, and
+  cache-friendly. The 413-byte projected responses in §4 come straight
+  from this.
+- Just as important is what was **not** indexed: a candidate index on the
+  ~1 KB access token was measured, found to be larger than the compressed
+  dataset itself, and dropped. Every index not created is RAM left for the
+  working set and write overhead avoided. Fewer, better-fitted indexes —
+  not more — is what keeps p50 at 2–3 ms over 16M documents.
+
+**Private networking — the client sits next to the database.**
+
+- The load generator runs in the same AWS region and reaches Atlas over a
+  **private endpoint (AWS PrivateLink)** — traffic never crosses the public
+  internet. VPC peering achieves the same effect and is equally suitable.
+- The measured network floor is **1.37 ms round trip** (p50). With the
+  query itself executing sub-millisecond server-side, that floor is most
+  of the 2–3 ms median — which is why the same benchmark over an office
+  internet connection or cross-region would fail the 10 ms SLO on network
+  alone, regardless of database performance.
+
+The production corollary: keep the application servers in-region with
+private connectivity (PrivateLink or VPC peering), keep the hot path on
+`_id`, and add secondary indexes only for queries that demonstrably need
+them — sized and filtered to the data they serve.
+
+## 6. The database was not the limit
 
 Atlas metrics for the **primary** during the knee run:
 
@@ -131,7 +169,7 @@ Practical corollaries:
 - The p99 tail shrinks with a larger cache tier (more of the 51 GB hot in
   RAM); the hot set itself (~5 GB) already fits with room to spare.
 
-## 6. Reproducing
+## 7. Reproducing
 
 Everything is deterministic (documents derive from a seed, byte-identical
 across regenerations) and scripted:
