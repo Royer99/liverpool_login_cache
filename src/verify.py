@@ -205,8 +205,12 @@ def verify_explain(cfg: Config) -> None:
     def plan_of(e: dict) -> str:
         return json.dumps(e["queryPlanner"]["winningPlan"])
 
-    exp = coll.find({"value.profile.email": doc["value"]["profile"]["email"]}) \
-              .limit(20).explain()
+    # Same shape as the harness's find_by_email: single doc, projected down
+    # to profile/device/recency (the ~1 KB JWT never leaves the server).
+    lookup_projection = {"value.profile": 1, "value.deviceInfo": 1,
+                         "value.lastUsedDate": 1}
+    exp = coll.find({"value.profile.email": doc["value"]["profile"]["email"]},
+                    lookup_projection).limit(1).explain()
     stats = exp["executionStats"]
     assert "email_1" in plan_of(exp), \
         f"email lookup not using email_1: {plan_of(exp)[:400]}"
@@ -218,7 +222,8 @@ def verify_explain(cfg: Config) -> None:
                                     tz=timezone.utc) \
         .isoformat(timespec="milliseconds").replace("+00:00", "Z")
     exp = coll.find({"value.deviceInfo.os": "iOS",
-                     "value.lastUsedDate": {"$gte": cutoff}}) \
+                     "value.lastUsedDate": {"$gte": cutoff}},
+                    lookup_projection) \
               .sort("value.lastUsedDate", -1).limit(cfg.zrange_limit).explain()
     stats = exp["executionStats"]
     p = plan_of(exp)

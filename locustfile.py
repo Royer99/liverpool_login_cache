@@ -66,6 +66,10 @@ _PER_USER_RPS = _TOTAL_RPS / CFG.locust_users
 
 _MISS = {"mget_requested": 0, "mget_returned": 0, "update_matched": 0, "update_sent": 0}
 
+# The customer lookups don't need the full session (the ~1 KB JWT dominates
+# doc size); returning only profile/device/recency cuts the response ~10x.
+LOOKUP_PROJECTION = {"value.profile": 1, "value.deviceInfo": 1, "value.lastUsedDate": 1}
+
 
 @events.init.add_listener
 def _assert_pool(environment: Any, **kw: Any) -> None:
@@ -161,17 +165,16 @@ class SessionReader(User):
 
     @task(2)
     def find_by_email(self) -> None:
-        """Account lookup: every session for one email (email_1 index).
-        Emails collide across sessions on purpose, so this returns a small
-        batch, like a 'your active sessions' page."""
+        """Account lookup: one session document for one email (email_1 index)."""
         for _ in range(8):  # ~30% of sessions are anonymous (no profile)
             prof = build_session_doc(CFG, self._sample_index())["value"].get("profile")
             if prof:
                 break
         else:
             return
-        _timed("find_by_email", lambda: list(
-            COLL.find({"value.profile.email": prof["email"]}).limit(20)))
+        _timed("find_by_email",
+               lambda: COLL.find_one({"value.profile.email": prof["email"]},
+                                     LOOKUP_PROJECTION))
 
     @task(1)
     def sessions_by_device(self) -> None:
@@ -183,7 +186,8 @@ class SessionReader(User):
             .isoformat(timespec="milliseconds").replace("+00:00", "Z")
         _timed("sessions_by_device", lambda: list(
             COLL.find({"value.deviceInfo.os": os_name,
-                       "value.lastUsedDate": {"$gte": cutoff}})
+                       "value.lastUsedDate": {"$gte": cutoff}},
+                      LOOKUP_PROJECTION)
             .sort("value.lastUsedDate", -1).limit(CFG.zrange_limit)))
 
 

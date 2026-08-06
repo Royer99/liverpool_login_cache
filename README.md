@@ -60,7 +60,7 @@ in-memory sort over millions of fetched docs (measured, not theoretical):
 
 | index | keys | serves |
 |---|---|---|
-| `email_1` | `{value.profile.email: 1}` | all sessions for an account |
+| `email_1` | `{value.profile.email: 1}` | session lookup by account email |
 | `device_lastUsed` | `{value.deviceInfo.os: 1, value.lastUsedDate: -1}` | newest sessions per device type, sorted by the index |
 
 (No index on `value.accessToken`: ~1 KB JWT keys across 13.7M docs make the
@@ -155,12 +155,14 @@ Operations, mapped 1:1 to the Redis calls they replace:
 | `update_session` | `SETEX` refresh | `$set` a field inside `value` |
 | `insert_session` | `SETEX` new | `insert_one` full session doc |
 | `push_index` | `ZADD` | `$push` with `$slice` cap |
-| `find_by_email` | — (needs `SCAN`) | `find` on `value.profile.email` (email_1) |
-| `sessions_by_device` | — (needs `SCAN`) | os equality + `lastUsedDate` range, index-sorted (device_lastUsed) |
+| `find_by_email` | — (needs `SCAN`) | `find_one` on `value.profile.email` (email_1), projected |
+| `sessions_by_device` | — (needs `SCAN`) | os equality + `lastUsedDate` range, index-sorted (device_lastUsed), projected |
 
 The secondary-index reads derive their lookup values client-side with
 `build_session_doc` (generation is deterministic), so they always hit real
-stored emails with zero memory or precomputed lists.
+stored emails with zero memory or precomputed lists. Both project the result
+down to profile/device/recency fields — the ~1 KB JWT never leaves the
+server, cutting the response ~10x versus returning full session docs.
 
 Notes on honesty:
 
