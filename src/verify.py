@@ -25,7 +25,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import Config, load_config  # noqa: E402
 from generate import build_session_doc  # noqa: E402
 from model import (  # noqa: E402
-    EPOCH_ANCHOR_MS,
     INDEX_DOC_FIELDS,
     SESSION_DOC_FIELDS,
     sample_session_index,
@@ -217,21 +216,6 @@ def verify_explain(cfg: Config) -> None:
     print(f"email lookup: uses email_1, returned={stats['nReturned']}, "
           f"keys={stats['totalKeysExamined']}, serverside {stats['executionTimeMillis']} ms")
 
-    from datetime import datetime, timezone
-    cutoff = datetime.fromtimestamp((EPOCH_ANCHOR_MS - 43_200_000) / 1000,
-                                    tz=timezone.utc) \
-        .isoformat(timespec="milliseconds").replace("+00:00", "Z")
-    exp = coll.find({"value.deviceInfo.os": "iOS",
-                     "value.lastUsedDate": {"$gte": cutoff}},
-                    lookup_projection) \
-              .sort("value.lastUsedDate", -1).limit(cfg.zrange_limit).explain()
-    stats = exp["executionStats"]
-    p = plan_of(exp)
-    assert "device_lastUsed" in p, f"device query not using device_lastUsed: {p[:400]}"
-    assert '"SORT"' not in p, f"device query does an in-memory sort: {p[:400]}"
-    print(f"device+recency: uses device_lastUsed (sort by index, no SORT stage), "
-          f"returned={stats['nReturned']}, keys={stats['totalKeysExamined']}, "
-          f"serverside {stats['executionTimeMillis']} ms")
 
 
 def verify_storage(cfg: Config) -> None:

@@ -51,22 +51,24 @@ Two intentional deviations from the export, both documented:
 key; its unique index comes for free and the point read is an `EXPRESS`/
 `IDHACK` plan (proven by `verify.py`, not asserted).
 
-Two **query indexes** serve the additional customer lookups (things Redis
-cannot do without `SCAN`), created after the load. Both are **partial by
+One **query index** serves the additional customer lookup (something Redis
+cannot do without `SCAN`), created after the load. It is **partial by
 necessity, not preference**: zset docs store an array in `value`, and
-indexing them makes any `value.*` index multikey — a multikey compound
-cannot provide the sort or tight bounds, degrading the device query to an
-in-memory sort over millions of fetched docs (measured, not theoretical):
+indexing them makes any `value.*` index multikey; the `$exists` filter
+excludes the array docs, and equality on the field implies `$exists`, so
+the planner still uses it:
 
 | index | keys | serves |
 |---|---|---|
 | `email_1` | `{value.profile.email: 1}` | session lookup by account email |
-| `device_lastUsed` | `{value.deviceInfo.os: 1, value.lastUsedDate: -1}` | newest sessions per device type, sorted by the index |
 
 (No index on `value.accessToken`: ~1 KB JWT keys across 13.7M docs make the
-build and the index itself disproportionately expensive; dropped by choice.)
+build and the index itself disproportionately expensive; dropped by choice.
+A device+recency compound was also tried and cut: multikey made it unable
+to serve its sort — an in-memory sort over millions of fetched docs,
+measured, not theoretical — so that query is out of scope.)
 
-They never touch the point-read plan — `verify.py` proves both facts with
+It never touches the point-read plan — `verify.py` proves both facts with
 `explain()`. Remaining optional indexes: `{type: 1}` (off by default) and a
 TTL index on `expiresAt` (`ENABLE_TTL_INDEX=false` by default — the dataset
 carries past expiries on purpose and would delete itself mid-benchmark).
@@ -156,11 +158,10 @@ Operations, mapped 1:1 to the Redis calls they replace:
 | `insert_session` | `SETEX` new | `insert_one` full session doc |
 | `push_index` | `ZADD` | `$push` with `$slice` cap |
 | `find_by_email` | — (needs `SCAN`) | `find_one` on `value.profile.email` (email_1), projected |
-| `sessions_by_device` | — (needs `SCAN`) | os equality + `lastUsedDate` range, index-sorted (device_lastUsed), projected |
 
-The secondary-index reads derive their lookup values client-side with
-`build_session_doc` (generation is deterministic), so they always hit real
-stored emails with zero memory or precomputed lists. Both project the result
+The email read derives its lookup values client-side with
+`build_session_doc` (generation is deterministic), so it always hits real
+stored emails with zero memory or precomputed lists, and projects the result
 down to profile/device/recency fields — the ~1 KB JWT never leaves the
 server, cutting the response ~10x versus returning full session docs.
 
