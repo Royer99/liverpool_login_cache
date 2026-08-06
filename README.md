@@ -1,5 +1,8 @@
 # MongoDB session-store benchmark (1:1 Redis structure)
 
+> **Measured results:** see [REPORT.md](REPORT.md) — 10 ms read SLO met with
+> p99 = 6 ms at 1,235 ops/s sustained; primary at ~10% CPU.
+
 Demonstrates that an Auth0 session store currently on a 3-shard Redis cluster
 runs on MongoDB Atlas **with the exact same data shape and access patterns** —
 point reads of session documents under 10 ms while a write workload runs
